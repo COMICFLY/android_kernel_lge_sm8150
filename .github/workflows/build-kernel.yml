@@ -16,12 +16,12 @@ on:
         default: "alphalm_lao_com-perf_defconfig"
         required: true
       ksu_repo:
-        description: "root 实现仓库（SukiSU / KernelSU-Next）"
-        default: "https://github.com/SukiSU-Ultra/SukiSU-Ultra"
+        description: "root 实现仓库"
+        default: "https://github.com/KernelSU-Next/KernelSU-Next"
         required: true
       ksu_ref:
-        description: "上述仓库的 ref（main = 最新）"
-        default: "main"
+        description: "ref（4.14 老内核用 v3.4.0-legacy）"
+        default: "v3.4.0-legacy"
         required: true
 
 jobs:
@@ -94,7 +94,8 @@ jobs:
             CONFIG_KALLSYMS=y \
             CONFIG_KALLSYMS_ALL=y \
             CONFIG_CPUSET_ASSIST=y \
-            CONFIG_STUNE_ASSIST=y ; do
+            CONFIG_STUNE_ASSIST=y \
+            CONFIG_KSU_KPROBES_HOOK=y ; do
             grep -q "^$c$" "$DEF" || echo "$c" >> "$DEF"
           done
           echo "=== defconfig 末尾 ==="
