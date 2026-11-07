@@ -12,16 +12,20 @@ on:
         default: "8150-susfs"
         required: true
       defconfig:
-        description: "defconfig 文件名"
-        default: "alphalm_lao_com-perf_defconfig"
+        description: "defconfig 文件名（相对 configs/vendor/）"
+        default: "lgg8_defconfig"
         required: true
+      base_config:
+        description: "基线配置路径（留空则用源码自带 defconfig）"
+        default: "configs/lgg8-running.config"
+        required: false
       ksu_repo:
         description: "root 实现仓库"
-        default: "https://github.com/KernelSU-Next/KernelSU-Next"
+        default: "https://github.com/Justadeayo/KernelSU"
         required: true
       ksu_ref:
-        description: "ref（4.14 老内核用 v3.4.0-legacy）"
-        default: "v3.4.0-legacy"
+        description: "ref（该 fork 默认 master）"
+        default: "master"
         required: true
 
 jobs:
@@ -60,6 +64,17 @@ jobs:
           ls "$HOME/tc/neutron-clang/bin" | head -10
           which clang && clang --version | head -1
           which aarch64-linux-gnu-ld && aarch64-linux-gnu-ld --version | head -1
+
+      - name: Use known-good base config
+        run: |
+          SRC="${{ github.event.inputs.base_config }}"
+          if [ -n "$SRC" ] && [ -f "$SRC" ]; then
+            cp "$SRC" "kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
+            echo "基线配置: $SRC -> ${{ github.event.inputs.defconfig }} ($(wc -l < "$SRC") 行)"
+            grep -c "^CONFIG_" "kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
+          else
+            echo "未提供基线配置，使用源码自带 defconfig"
+          fi
 
       - name: Integrate root solution (latest)
         run: |
