@@ -1,0 +1,131 @@
+name: Build LG G8 kernel (SukiSU / KSU latest)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_branch:
+        description: "内核分支（本仓库内的分支名）"
+        default: "8150-susfs"
+        required: true
+      defconfig:
+        description: "defconfig 文件名"
+        default: "alphalm_lao_com-perf_defconfig"
+        required: true
+      ksu_repo:
+        description: "root 实现仓库（SukiSU / KernelSU-Next）"
+        default: "https://github.com/SukiSU-Ultra/SukiSU-Ultra"
+        required: true
+      ksu_ref:
+        description: "上述仓库的 ref（main = 最新）"
+        default: "main"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout kernel source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.kernel_branch }}
+          fetch-depth: 1
+          path: kernel
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bc bison build-essential ccache curl file flex git \
+            libncurses5-dev libssl-dev make zip wget
+
+      - name: Fetch Neutron Clang toolchain
+        run: |
+          mkdir -p "$HOME/tc/neutron-clang"
+          cd "$HOME/tc/neutron-clang"
+          curl -sLO "https://raw.githubusercontent.com/Neutron-Toolchains/antman/main/antman"
+          chmod +x antman
+          ./antman -S=latest
+          ./antman --patch=glibc
+          echo "$HOME/tc/neutron-clang/bin" >> "$GITHUB_PATH"
+
+      - name: Integrate root solution (latest)
+        run: |
+          git clone --depth=1 --branch "${{ github.event.inputs.ksu_ref }}" \
+            ${{ github.event.inputs.ksu_repo }} ksu_src
+          echo "root commit: $(cd ksu_src && git rev-parse --short HEAD)"
+          rm -rf kernel/drivers/kernelsu
+          cp -r ksu_src/kernel kernel/drivers/kernelsu
+          grep -q "kernelsu" kernel/drivers/Makefile || \
+            echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
+          grep -q "drivers/kernelsu" kernel/drivers/Kconfig || \
+            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
+
+      - name: Enable KSU / SUSFS / KPROBES in defconfig
+        run: |
+          DEF="kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
+          test -f "$DEF" || { echo "defconfig 不存在: $DEF"; exit 1; }
+          for c in \
+            CONFIG_KSU=y \
+            CONFIG_KSU_SUSFS=y \
+            CONFIG_KSU_SUSFS_SUS_MOUNT=y \
+            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y \
+            CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y \
+            CONFIG_KSU_SUSFS_SUS_PATH=y \
+            CONFIG_KSU_SUSFS_SPOOF_UNAME=y \
+            CONFIG_KSU_SUSFS_ENABLE_LOG=y \
+            CONFIG_KPROBES=y \
+            CONFIG_KPROBE_EVENTS=y \
+            CONFIG_HAVE_KPROBES=y \
+            CONFIG_EXT4_FS=y \
+            CONFIG_KALLSYMS=y \
+            CONFIG_KALLSYMS_ALL=y ; do
+            grep -q "^$c$" "$DEF" || echo "$c" >> "$DEF"
+          done
+          echo "=== defconfig 末尾 ==="
+          tail -16 "$DEF"
+
+      - name: Build kernel (Image)
+        run: |
+          cd kernel
+          make O=out ARCH=arm64 \
+            CC=clang HOSTCC=gcc \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            ${{ github.event.inputs.defconfig }}
+          make -j"$(nproc)" O=out ARCH=arm64 \
+            CC=clang HOSTCC=gcc \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            Image 2>&1 | tail -60
+          echo "=== 产物 ==="
+          ls -lh out/arch/arm64/boot/
+
+      - name: Package with AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/Xtrakari/AnyKernel3.git ak3
+          rm -rf ak3/.git ak3/.github ak3/README.md
+          cp kernel/out/arch/arm64/boot/Image ak3/Image
+          ROOT_SHA=$(cd ksu_src && git rev-parse --short HEAD)
+          ZIP="AK3-LG-G8-sukisu-${ROOT_SHA}-$(date +%Y%m%d%H%M).zip"
+          (cd ak3 && zip -r9 "../$ZIP" .)
+          ls -lh "$ZIP"
+          echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sukisu-${{ github.run_number }}
+          name: SukiSU kernel build ${{ github.run_number }}
+          files: ${{ env.ZIP_NAME }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
