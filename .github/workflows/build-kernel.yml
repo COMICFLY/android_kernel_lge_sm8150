@@ -97,7 +97,12 @@ jobs:
 
       - name: Build kernel (Image)
         run: |
+          set -o pipefail
           cd kernel
+          echo "=== 工具链自检 ==="
+          which clang aarch64-linux-gnu-ld arm-linux-gnueabi-as || exit 1
+          clang --version | head -1
+          aarch64-linux-gnu-ld --version | head -1
           make O=out ARCH=arm64 \
             CC=clang HOSTCC=gcc \
             CROSS_COMPILE=aarch64-linux-gnu- \
@@ -109,9 +114,10 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            Image 2>&1 | tail -60
+            Image
           echo "=== 产物 ==="
           ls -lh out/arch/arm64/boot/
+          test -s out/arch/arm64/boot/Image || { echo "Image 未生成！"; exit 1; }
 
       - name: Package with AnyKernel3
         run: |
