@@ -28,6 +28,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout kernel source
@@ -203,7 +205,7 @@ jobs:
           rm -rf ak3/.git ak3/.github ak3/README.md
           cp kernel/out/arch/arm64/boot/Image ak3/Image
           ROOT_SHA=$(cd kernel/KernelSU && git rev-parse --short HEAD)
-          ZIP="AK3-LG-G8-sukisu-${ROOT_SHA}-$(date +%Y%m%d%H%M).zip"
+          ZIP="AK3-LG-G8-ksu-${ROOT_SHA}-$(date +%Y%m%d%H%M).zip"
           (cd ak3 && zip -r9 "../$ZIP" .)
           ls -lh "$ZIP"
           echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
