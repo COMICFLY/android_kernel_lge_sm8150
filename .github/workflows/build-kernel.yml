@@ -249,7 +249,7 @@ jobs:
           git clone --depth=1 https://github.com/Xtrakari/AnyKernel3.git ak3
           rm -rf ak3/.git ak3/.github ak3/README.md
           cp kernel/out/arch/arm64/boot/Image ak3/Image
-          ROOT_SHA=$(cd kernel/KernelSU && git rev-parse --short HEAD)
+          ROOT_SHA=$(cd kernel/KernelSU 2>/dev/null && git rev-parse --short HEAD || echo "noksu")
           ZIP="AK3-LG-G8-ksu-${ROOT_SHA}-$(date +%Y%m%d%H%M).zip"
           (cd ak3 && zip -r9 "../$ZIP" .)
           ls -lh "$ZIP"
