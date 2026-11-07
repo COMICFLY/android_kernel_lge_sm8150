@@ -27,6 +27,10 @@ on:
         description: "ref（该 fork 默认 master）"
         default: "master"
         required: true
+      enable_root:
+        description: "是否集成 root（false=纯内核，用于隔离测试）"
+        default: "true"
+        required: false
 
 jobs:
   build:
@@ -84,6 +88,7 @@ jobs:
           grep -E "^CONFIG_(KSU|SUSFS)" "$DEF" | head -6
 
       - name: Integrate root solution (latest)
+        if: ${{ github.event.inputs.enable_root != 'false' }}
         run: |
           git clone --branch "${{ github.event.inputs.ksu_ref }}" \
             ${{ github.event.inputs.ksu_repo }} kernel/KernelSU
@@ -99,6 +104,7 @@ jobs:
             printf '\nsource "drivers/kernelsu/Kconfig"\n' >> kernel/drivers/Kconfig
 
       - name: Enable KSU / SUSFS / KPROBES in defconfig
+        if: ${{ github.event.inputs.enable_root != 'false' }}
         run: |
           DEF="kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
           test -f "$DEF" || { echo "defconfig 不存在: $DEF"; exit 1; }
