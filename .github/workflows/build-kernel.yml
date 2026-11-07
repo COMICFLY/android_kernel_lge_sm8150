@@ -124,6 +124,27 @@ jobs:
           PY
           echo "--- 补丁后确认 ---"
           grep -n -B1 "cpuset_write_resmask_assist" kernel/cgroup/cpuset.c | head -6
+          python3 - <<'PY'
+          import io, os
+          p = 'drivers/kernelsu/sulog/event.c'
+          if not os.path.exists(p):
+              print('sulog/event.c 不存在，跳过'); raise SystemExit(0)
+          s = io.open(p, encoding='utf-8', errors='surrogateescape').read()
+          old = '    struct timespec64 ts;'
+          new = ('#if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE\n'
+                 '    struct timespec64 ts;\n'
+                 '#else\n'
+                 '    struct timespec ts;\n'
+                 '#endif')
+          if 'struct timespec ts;' in s and '#else\n    struct timespec ts;' in s:
+              print('sulog 已适配，跳过')
+          else:
+              n = s.count(old)
+              s = s.replace(old, new)
+              io.open(p, 'w', encoding='utf-8', errors='surrogateescape').write(s)
+              print(f'sulog 补丁完成，替换 {n} 处')
+          PY
+          grep -n -A3 "struct timespec64 ts" drivers/kernelsu/sulog/event.c | head -8
 
       - name: Build kernel (Image)
         run: |
