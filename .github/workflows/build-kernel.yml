@@ -97,6 +97,8 @@ jobs:
 
       - name: Patch known source quirks
         run: |
+          cd kernel
+          test -f kernel/cgroup/cpuset.c || { echo "cpuset.c 路径不对"; ls; exit 1; }
           python3 - <<'PY'
           import io
           p = 'kernel/cgroup/cpuset.c'
@@ -104,13 +106,13 @@ jobs:
           marker_fn = 'static ssize_t cpuset_write_resmask_assist('
           marker_next = 'static ssize_t cpuset_write_resmask_wrapper('
           if '#ifdef CONFIG_CPUSET_ASSIST\n' + marker_fn in s:
-              print('cpuset assist already guarded, skip')
+              print('already guarded, skip')
           elif marker_fn in s and marker_next in s:
               i = s.index(marker_fn)
               j = s.index(marker_next, i)
               s = s[:i] + '#ifdef CONFIG_CPUSET_ASSIST\n' + s[i:j] + '#endif\n\n' + s[j:]
               io.open(p, 'w', encoding='utf-8', errors='surrogateescape').write(s)
-              print('patched: cpuset_write_resmask_assist guarded by CONFIG_CPUSET_ASSIST')
+              print('patched: cpuset_write_resmask_assist guarded')
           else:
               print('pattern not found, nothing to patch')
           PY
