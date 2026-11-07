@@ -61,15 +61,18 @@ jobs:
 
       - name: Integrate root solution (latest)
         run: |
-          git clone --depth=1 --branch "${{ github.event.inputs.ksu_ref }}" \
-            ${{ github.event.inputs.ksu_repo }} ksu_src
-          echo "root commit: $(cd ksu_src && git rev-parse --short HEAD)"
+          git clone --branch "${{ github.event.inputs.ksu_ref }}" \
+            ${{ github.event.inputs.ksu_repo }} kernel/KernelSU
+          echo "root commit: $(cd kernel/KernelSU && git rev-parse --short HEAD)"
           rm -rf kernel/drivers/kernelsu
-          cp -r ksu_src/kernel kernel/drivers/kernelsu
+          ln -sfn ../KernelSU/kernel kernel/drivers/kernelsu
+          ls -l kernel/drivers/kernelsu
+          ls kernel/drivers/kernelsu/uapi 2>/dev/null | head -3 || \
+            ln -sfn ../uapi kernel/KernelSU/kernel/uapi
           grep -q "kernelsu" kernel/drivers/Makefile || \
             echo 'obj-$(CONFIG_KSU) += kernelsu/' >> kernel/drivers/Makefile
           grep -q "drivers/kernelsu" kernel/drivers/Kconfig || \
-            echo 'source "drivers/kernelsu/Kconfig"' >> kernel/drivers/Kconfig
+            printf '\nsource "drivers/kernelsu/Kconfig"\n' >> kernel/drivers/Kconfig
 
       - name: Enable KSU / SUSFS / KPROBES in defconfig
         run: |
@@ -89,7 +92,9 @@ jobs:
             CONFIG_HAVE_KPROBES=y \
             CONFIG_EXT4_FS=y \
             CONFIG_KALLSYMS=y \
-            CONFIG_KALLSYMS_ALL=y ; do
+            CONFIG_KALLSYMS_ALL=y \
+            CONFIG_CPUSET_ASSIST=y \
+            CONFIG_STUNE_ASSIST=y ; do
             grep -q "^$c$" "$DEF" || echo "$c" >> "$DEF"
           done
           echo "=== defconfig 末尾 ==="
@@ -174,7 +179,7 @@ jobs:
           git clone --depth=1 https://github.com/Xtrakari/AnyKernel3.git ak3
           rm -rf ak3/.git ak3/.github ak3/README.md
           cp kernel/out/arch/arm64/boot/Image ak3/Image
-          ROOT_SHA=$(cd ksu_src && git rev-parse --short HEAD)
+          ROOT_SHA=$(cd kernel/KernelSU && git rev-parse --short HEAD)
           ZIP="AK3-LG-G8-sukisu-${ROOT_SHA}-$(date +%Y%m%d%H%M).zip"
           (cd ak3 && zip -r9 "../$ZIP" .)
           ls -lh "$ZIP"
