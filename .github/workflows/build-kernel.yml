@@ -42,7 +42,8 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y bc bison build-essential ccache curl file flex git \
-            libncurses5-dev libssl-dev make zip wget
+            libncurses5-dev libssl-dev make zip wget \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
 
       - name: Fetch Neutron Clang toolchain
         run: |
@@ -53,6 +54,10 @@ jobs:
           ./antman -S=latest
           ./antman --patch=glibc
           echo "$HOME/tc/neutron-clang/bin" >> "$GITHUB_PATH"
+          echo "=== 工具链自检 ==="
+          ls "$HOME/tc/neutron-clang/bin" | head -10
+          which clang && clang --version | head -1
+          which aarch64-linux-gnu-ld && aarch64-linux-gnu-ld --version | head -1
 
       - name: Integrate root solution (latest)
         run: |
@@ -98,7 +103,7 @@ jobs:
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            ${{ github.event.inputs.defconfig }}
+            vendor/${{ github.event.inputs.defconfig }}
           make -j"$(nproc)" O=out ARCH=arm64 \
             CC=clang HOSTCC=gcc \
             CROSS_COMPILE=aarch64-linux-gnu- \
