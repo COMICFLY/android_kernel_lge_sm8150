@@ -95,29 +95,77 @@ jobs:
           echo "=== defconfig 末尾 ==="
           tail -16 "$DEF"
 
+      - name: Patch known source quirks
+        run: |
+          python3 - <<'PY'
+          import io
+          p = 'kernel/cgroup/cpuset.c'
+          s = io.open(p, encoding='utf-8', errors='surrogateescape').read()
+          marker_fn = 'static ssize_t cpuset_write_resmask_assist('
+          marker_next = 'static ssize_t cpuset_write_resmask_wrapper('
+          if '#ifdef CONFIG_CPUSET_ASSIST\n' + marker_fn in s:
+              print('cpuset assist already guarded, skip')
+          elif marker_fn in s and marker_next in s:
+              i = s.index(marker_fn)
+              j = s.index(marker_next, i)
+              s = s[:i] + '#ifdef CONFIG_CPUSET_ASSIST\n' + s[i:j] + '#endif\n\n' + s[j:]
+              io.open(p, 'w', encoding='utf-8', errors='surrogateescape').write(s)
+              print('patched: cpuset_write_resmask_assist guarded by CONFIG_CPUSET_ASSIST')
+          else:
+              print('pattern not found, nothing to patch')
+          PY
+          echo "--- 补丁后确认 ---"
+          grep -n -B1 "cpuset_write_resmask_assist" kernel/cgroup/cpuset.c | head -6
+
       - name: Build kernel (Image)
         run: |
           set -o pipefail
           cd kernel
           echo "=== 工具链自检 ==="
-          which clang aarch64-linux-gnu-ld arm-linux-gnueabi-as || exit 1
+          which clang aarch64-linux-gnu-ld arm-linux-gnueabi-as
           clang --version | head -1
-          aarch64-linux-gnu-ld --version | head -1
+
+          echo "=== 生成 .config ==="
           make O=out ARCH=arm64 \
             CC=clang HOSTCC=gcc \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            vendor/${{ github.event.inputs.defconfig }}
-          make -j"$(nproc)" O=out ARCH=arm64 \
+            vendor/${{ github.event.inputs.defconfig }} > defconfig.log 2>&1 \
+            || { echo "defconfig 失败"; tail -40 defconfig.log; exit 1; }
+          echo "defconfig OK"
+
+          echo "=== 编译（全量日志写入 build.log，不刷屏）==="
+          if make -j"$(nproc)" O=out ARCH=arm64 \
             CC=clang HOSTCC=gcc \
             CROSS_COMPILE=aarch64-linux-gnu- \
             CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            Image
+            Image > build.log 2>&1 ; then
+            echo "=== 编译成功 ==="
+            tail -5 build.log
+          else
+            echo "=== 编译失败：错误行摘要 ==="
+            grep -n -iE "error:|fatal error|Error [0-9]+|No such file" build.log | tail -40 || true
+            echo "=== 日志末尾 100 行 ==="
+            tail -100 build.log
+            exit 1
+          fi
+
           echo "=== 产物 ==="
           ls -lh out/arch/arm64/boot/
           test -s out/arch/arm64/boot/Image || { echo "Image 未生成！"; exit 1; }
+
+      - name: Upload full build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: |
+            kernel/build.log
+            kernel/defconfig.log
+          if-no-files-found: ignore
+          retention-days: 1
 
       - name: Package with AnyKernel3
         run: |
