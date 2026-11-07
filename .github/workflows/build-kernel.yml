@@ -67,14 +67,21 @@ jobs:
 
       - name: Use known-good base config
         run: |
+          DEF="kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
           SRC="${{ github.event.inputs.base_config }}"
-          if [ -n "$SRC" ] && [ -f "$SRC" ]; then
-            cp "$SRC" "kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
-            echo "基线配置: $SRC -> ${{ github.event.inputs.defconfig }} ($(wc -l < "$SRC") 行)"
-            grep -c "^CONFIG_" "kernel/arch/arm64/configs/vendor/${{ github.event.inputs.defconfig }}"
-          else
-            echo "未提供基线配置，使用源码自带 defconfig"
+          if [ -z "$SRC" ]; then
+            echo "未提供基线配置，使用源码自带 defconfig"; exit 0
           fi
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$DEF"
+          else
+            URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_REF_NAME}/${SRC}"
+            echo "从 $URL 下载基线配置"
+            curl -fsSL "$URL" -o "$DEF" || { echo "基线配置下载失败"; exit 1; }
+          fi
+          echo "行数: $(wc -l < "$DEF")"
+          grep -c "^CONFIG_" "$DEF"
+          grep -E "^CONFIG_(KSU|SUSFS)" "$DEF" | head -6
 
       - name: Integrate root solution (latest)
         run: |
