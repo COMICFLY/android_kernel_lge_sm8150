@@ -3,8 +3,12 @@ name: Build LG G8 kernel (SukiSU / KSU latest)
 on:
   workflow_dispatch:
     inputs:
+      kernel_repo:
+        description: "内核源码仓库（upstream）"
+        default: "Xtrakari/android_kernel_lge_sm8150"
+        required: true
       kernel_branch:
-        description: "内核分支（本仓库内的分支名）"
+        description: "内核分支"
         default: "8150-susfs"
         required: true
       defconfig:
@@ -29,6 +33,7 @@ jobs:
       - name: Checkout kernel source
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.inputs.kernel_repo }}
           ref: ${{ github.event.inputs.kernel_branch }}
           fetch-depth: 1
           path: kernel
