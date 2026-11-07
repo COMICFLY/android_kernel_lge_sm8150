@@ -122,10 +122,7 @@ jobs:
             CONFIG_HAVE_KPROBES=y \
             CONFIG_EXT4_FS=y \
             CONFIG_KALLSYMS=y \
-            CONFIG_KALLSYMS_ALL=y \
-            CONFIG_CPUSET_ASSIST=y \
-            CONFIG_STUNE_ASSIST=y \
-            CONFIG_KSU_KPROBES_HOOK=y ; do
+            CONFIG_KALLSYMS_ALL=y ; do
             grep -q "^$c$" "$DEF" || echo "$c" >> "$DEF"
           done
           echo "=== defconfig 末尾 ==="
@@ -174,7 +171,27 @@ jobs:
               io.open(p, 'w', encoding='utf-8', errors='surrogateescape').write(s)
               print(f'sulog 补丁完成，替换 {n} 处')
           PY
-          grep -n -A3 "struct timespec64 ts" drivers/kernelsu/sulog/event.c | head -8
+          grep -n -A3 "struct timespec64 ts" drivers/kernelsu/sulog/event.c 2>/dev/null | head -8
+          python3 - <<'PY'
+          import io
+          p = 'kernel/sched/tune.c'
+          s = io.open(p, encoding='utf-8', errors='surrogateescape').read()
+          a = '\t\t.write_s64 = boost_write_wrapper,'
+          b = '\t\t.write_u64 = prefer_idle_write_wrapper,'
+          a2 = ('#ifdef CONFIG_STUNE_ASSIST\n\t\t.write_s64 = boost_write_wrapper,\n'
+                '#else\n\t\t.write_s64 = boost_write,\n#endif')
+          b2 = ('#ifdef CONFIG_STUNE_ASSIST\n\t\t.write_u64 = prefer_idle_write_wrapper,\n'
+                '#else\n\t\t.write_u64 = prefer_idle_write,\n#endif')
+          changed = 0
+          if a in s:
+              s = s.replace(a, a2); changed += 1
+          if b in s:
+              s = s.replace(b, b2); changed += 1
+          if changed:
+              io.open(p, 'w', encoding='utf-8', errors='surrogateescape').write(s)
+          print(f'tune.c 补丁: {changed} 处')
+          PY
+          grep -n -B1 -A5 "write_s64 = boost_write" kernel/sched/tune.c | head -10
 
       - name: Build kernel (Image)
         run: |
